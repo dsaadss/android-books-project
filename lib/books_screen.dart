@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_file_downloader/flutter_file_downloader.dart';
+import 'package:dio/dio.dart';
 import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
 
 class BooksScreen extends StatefulWidget {
   final String ageRange;
@@ -13,6 +15,7 @@ class BooksScreen extends StatefulWidget {
 }
 
 class _BooksScreenState extends State<BooksScreen> {
+  final Dio dio = Dio();
   Map<int, double> progressMap = {};
   Map<int, String> filePathMap = {};
 
@@ -36,59 +39,76 @@ class _BooksScreenState extends State<BooksScreen> {
     '4-8': [
       {
         'title': 'Max the curious boy',
-        'pdf': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Max%20the%20curious%20boy%204-8.pdf',
-        'word': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Max%20the%20curious%20boy%204-8.docx',
+        'pdf':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Max%20the%20curious%20boy%204-8.pdf',
+        'word':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Max%20the%20curious%20boy%204-8.docx',
       },
       {
         'title': 'Sophie and the Magical Garden',
-        'pdf': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Sophie%20and%20the%20Magical%20Garden%204-8.pdf',
-        'word': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Sophie%20and%20the%20Magical%20Garden%204-8.docx',
+        'pdf':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Sophie%20and%20the%20Magical%20Garden%204-8.pdf',
+        'word':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/4-8/Sophie%20and%20the%20Magical%20Garden%204-8.docx',
       },
     ],
     '8-12': [
       {
         'title': 'ori and loria',
-        'pdf': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/ori%20and%20loria%2012.pdf',
-        'word': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/ori%20and%20loria%2012.docx',
+        'pdf':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/ori%20and%20loria%2012.pdf',
+        'word':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/ori%20and%20loria%2012.docx',
       },
       {
         'title': 'Willow Creek',
-        'pdf': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/Willow%20Creek%2012.pdf',
-        'word': 'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/Willow%20Creek%2012.docx',
+        'pdf':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/Willow%20Creek%2012.pdf',
+        'word':
+            'https://obuehwqalxwaybvlrgdk.supabase.co/storage/v1/object/public/books/12/Willow%20Creek%2012.docx',
       },
     ],
   };
 
-  void _downloadFile(String url, int index) {
+  Future<void> _downloadFile(String url, int index) async {
+    final fileName = Uri.parse(url).pathSegments.last;
+    final dir = await getApplicationDocumentsDirectory();
+    final filePath = '${dir.path}/$fileName';
+
     setState(() {
-      progressMap[index] = 0;
+      progressMap[index] = 0.0;
     });
 
-    FileDownloader.downloadFile(
-      url: url,
-      onProgress: (fileName, progress) {
-        setState(() {
-          progressMap[index] = progress;
-        });
-      },
-      onDownloadCompleted: (path) {
-        setState(() {
-          filePathMap[index] = path;
-          progressMap.remove(index);
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Downloaded to: $path')));
-      },
-      onDownloadError: (errorMessage) {
-        setState(() {
-          progressMap.remove(index);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $errorMessage')),
-        );
-      },
-    );
+    try {
+      await dio.download(
+        url,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              progressMap[index] = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        progressMap.remove(index);
+        filePathMap[index] = filePath;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Downloaded to: $filePath')));
+    } catch (e) {
+      setState(() {
+        progressMap.remove(index);
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+    }
   }
 
   void _openFile(int index) {
@@ -136,9 +156,9 @@ class _BooksScreenState extends State<BooksScreen> {
                       ),
                     )
                   : filePathMap.containsKey(index)
-                  ? IconButton(
-                      icon: const Icon(Icons.open_in_new),
+                  ? ElevatedButton(
                       onPressed: () => _openFile(index),
+                      child: const Text('Open'),
                     )
                   : ElevatedButton(
                       onPressed: () => _downloadFile(url, index),
